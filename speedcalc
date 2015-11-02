@@ -132,7 +132,7 @@ $Unit_text[DISTANCE] = {
 my $Output_unit;
 my @Output_unit_pattern;
 $Output_unit_pattern[SPEED]    = '^(km\/h|m\/s)$';
-$Output_unit_pattern[DISTANCE] = '^(m|km)$'; 
+$Output_unit_pattern[DISTANCE] = '^(m|km)$';
 
 # configuration }}}
 # analyse options {{{ ------------------------------------------
@@ -143,7 +143,7 @@ $Output_unit_pattern[DISTANCE] = '^(m|km)$';
 # -p <precision>
 # -o <output unit>
 # -v <verbose>
-# -h 
+# -h
 
 my %options = ();
 
@@ -167,7 +167,7 @@ if (exists($options{t}) and exists($options{s}) and exists($options{l})) {
     error(ERR_OPTIONS_INPUT_THREE);
 }
 
-elsif (exists($options{t}) and exists($options{d})) { 
+elsif (exists($options{t}) and exists($options{d})) {
     $Target = SPEED;
 }
 elsif (exists($options{t}) and exists($options{s})) {
@@ -248,7 +248,7 @@ if ($Target == TIME) {
 }
 else {
     my $Output_value = $Values[$Target] / $Unit_factor[$Target]->{$Output_unit};
-    printf "%." . $Precision . "f " 
+    printf "%." . $Precision . "f "
            . $Unit_text[$Target]->{$Output_unit} . "\n", $Output_value;
 }
 
@@ -271,7 +271,7 @@ sub calculate {
         else {
             error(ERR_NO_TARGET);
         }
-        $Values[$target] = $value;    
+        $Values[$target] = $value;
     }
 }
 
