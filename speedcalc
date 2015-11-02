@@ -1,0 +1,392 @@
+#!/usr/bin/env perl
+# vim:et:sts=4:sw=4:si:fdm=marker:tw=0
+
+# speedcalc : calculate time, distance, speed
+# author    : Michael Adam <mad@obnox.de>
+# license   : GPL
+# history   :
+#   v0.1  2005-04-25 initial version
+
+use strict;
+use warnings;
+
+use Getopt::Std;
+use POSIX qw(floor);
+
+# configuration {{{ --------------------------------------------
+
+my $Version = "0.1";
+my $Version_date = "2005-04-25";
+my $Email = "mad\@obnox.de";
+my $Real_name = "Michael Adam";
+
+# - error constants/messages {{{ -------------------------------
+use constant ERR_OPTIONS_INPUT_THREE    => 1;
+use constant ERR_OPTIONS_INPUT_MISS     => 2;
+use constant ERR_SYNTAX_TIME            => 3;
+use constant ERR_SYNTAX_SPEED           => 4;
+use constant ERR_SYNTAX_DISTANCE        => 5;
+use constant ERR_OUTPUT_FORMAT          => 6;
+use constant ERR_OUTPUT_FORMAT_SPEED    => 7;
+use constant ERR_OUTPUT_FORMAT_DISTANCE => 8;
+use constant ERR_OUTPUT_FORMAT_PRESENT  => 9;
+use constant ERR_SYNTAX_PRECISION       => 10;
+use constant ERR_NO_TARGET              => 11;
+
+my @errors = ();
+$errors[ERR_OPTIONS_INPUT_THREE]    = "It makes no sense to give all three input options.";
+$errors[ERR_OPTIONS_INPUT_MISS]     = "Need at least one input option.";
+$errors[ERR_SYNTAX_TIME]            = "Wrong time format.";
+$errors[ERR_SYNTAX_SPEED]           = "Wrong speed syntax.";
+$errors[ERR_SYNTAX_DISTANCE]        = "Wrong distance syntax.";
+$errors[ERR_SYNTAX_PRECISION]       = "Wrong precision syntax.";
+$errors[ERR_OUTPUT_FORMAT]          = "Invalid output format.";
+$errors[ERR_OUTPUT_FORMAT_SPEED]    = "Invalid output format.";
+$errors[ERR_OUTPUT_FORMAT_DISTANCE] = "Invalid output format.";
+$errors[ERR_OUTPUT_FORMAT_PRESENT]  = "Option -o only allowed with target SPEED or DISTANCE.";
+$errors[ERR_NO_TARGET]              = "No target given.";
+# - error contstants/messages }}}
+
+# input/target entities
+use constant TIME     => 1;
+use constant DISTANCE => 2;
+use constant SPEED    => 3;
+
+# clear text names:
+my @Entity_text;
+$Entity_text[TIME]     = "time";
+$Entity_text[DISTANCE] = "distance";
+$Entity_text[SPEED]    = "speed";
+
+# option letter for command line:
+my @Entity_option;
+$Entity_option[TIME]     = "t";
+$Entity_option[SPEED]    = "s";
+$Entity_option[DISTANCE] = "d";
+
+# regexes for parsing cmd line:
+my @Entity_pattern;
+$Entity_pattern[TIME]     = '^(\d+(?:\.\d+)?)([smhdw]?)$';
+$Entity_pattern[SPEED]    = '^(\d+(?:\.\d+)?)(m\/s|km\/h)?$';
+$Entity_pattern[DISTANCE] = '^(\d+(?:\.\d+)?)(m|km)?$';
+
+my @Entity_syntax_error;
+$Entity_syntax_error[TIME]     = ERR_SYNTAX_TIME;
+$Entity_syntax_error[SPEED]    = ERR_SYNTAX_SPEED;
+$Entity_syntax_error[DISTANCE] = ERR_SYNTAX_DISTANCE;
+
+my $Debug = 0;
+my $Precision = 2;
+my $Recalculate = 0;
+my $Target;
+my @Values;
+
+# default unit for in-/output:
+my @Default_unit;
+$Default_unit[TIME]     = "s";
+$Default_unit[DISTANCE] = "m";
+$Default_unit[SPEED]    = "km/h";
+
+# all units are converted to this base unit first:
+my @Base_unit;
+$Base_unit[TIME]     = "s";
+$Base_unit[DISTANCE] = "m";
+$Base_unit[SPEED]    = "m/s";
+
+# factor to get base-unit from given unit:
+my @Unit_factor;
+$Unit_factor[TIME] = {
+    "s" => 1,
+    "m" => 60,
+    "h" => 3600,
+    "d" => 86400,
+    "w" => 604800,
+};
+$Unit_factor[SPEED] = {
+    "m/s"  => 1 ,
+    "km/h" => 1 / 3.6,
+};
+$Unit_factor[DISTANCE] = {
+    "m" => 1,
+    "km" => 1000,
+};
+
+# text output strings for units:
+my @Unit_text;
+$Unit_text[TIME] = {
+    "s" => "seconds",
+    "m" => "minutes",
+    "h" => "hours",
+    "d" => "days",
+    "w" => "weeks",
+};
+$Unit_text[SPEED] = {
+    "km/h" => "km/h",
+    "m/s"  => "m/sec",
+};
+$Unit_text[DISTANCE] = {
+    "m" => "meters",
+    "km" => "kilometers",
+};
+
+my $Output_unit;
+my @Output_unit_pattern;
+$Output_unit_pattern[SPEED]    = '^(km\/h|m\/s)$';
+$Output_unit_pattern[DISTANCE] = '^(m|km)$'; 
+
+# configuration }}}
+# analyse options {{{ ------------------------------------------
+
+# -t <time>
+# -d <distance>
+# -s <speed>
+# -p <precision>
+# -o <output unit>
+# -v <verbose>
+# -h 
+
+my %options = ();
+
+getopts("t:d:s:p:o:vh", \%options);
+
+if (keys %options == 0 or $options{h}) {
+    help();
+}
+
+# - determine debug {{{ ----------------------------------------
+
+if ($options{v}) {
+    $Debug = 1;
+    mydebug("debug: on.\n");
+}
+
+# - determine debug }}}
+# - determine target {{{ ---------------------------------------
+
+if (exists($options{t}) and exists($options{s}) and exists($options{l})) {
+    error(ERR_OPTIONS_INPUT_THREE);
+}
+
+elsif (exists($options{t}) and exists($options{d})) { 
+    $Target = SPEED;
+}
+elsif (exists($options{t}) and exists($options{s})) {
+    $Target = DISTANCE;
+}
+elsif (exists($options{d}) and exists($options{s})) {
+    $Target = TIME;
+}
+
+else {
+    $Recalculate = 1;
+    if (exists($options{s})) {
+        $Target = SPEED;
+    }
+    elsif (exists($options{d})) {
+        $Target = DISTANCE;
+    }
+    elsif (exists($options{t})) {
+        $Target = TIME;
+    }
+    else {
+        error(ERR_OPTIONS_INPUT_MISS);
+    }
+}
+mydebug("target: $Target\n");
+
+# - determine target }}}
+# - get values {{{ ---------------------------------------------
+
+get_value(TIME);
+get_value(SPEED);
+get_value(DISTANCE);
+
+# - get values }}}
+# - output options {{{ -----------------------------------------
+
+if ($options{o}) {
+    if ($Target == SPEED or $Target == DISTANCE ) {
+        if ($options{o} =~ /$Output_unit_pattern[$Target]/ ) {
+            $Output_unit = $1;
+        }
+        else {
+            error(ERR_OUTPUT_FORMAT);
+        }
+    }
+    else {
+        error(ERR_OUTPUT_FORMAT_PRESENT);
+    }
+}
+else {
+    $Output_unit = $Default_unit[$Target];
+}
+mydebug("output unit: $Output_unit\n");
+
+# - output options }}}
+# - determine precision {{{ ------------------------------------
+
+if ($options{p}) {
+    if ($options{p} =~ /^\d+$/) {
+        $Precision = $options{p};
+    }
+    else {
+        error(ERR_SYNTAX_PRECISION);
+    }
+}
+mydebug("precision: $Precision\n");
+
+# - determine precision }}}
+
+# analyse options }}}
+# action {{{ ---------------------------------------------------
+
+calculate($Target);
+mydebug("Target: $Values[$Target] $Default_unit[$Target]\n");
+
+if ($Target == TIME) {
+    print format_time($Values[TIME]) . "\n";
+}
+else {
+    my $Output_value = $Values[$Target] / $Unit_factor[$Target]->{$Output_unit};
+    printf "%." . $Precision . "f " 
+           . $Unit_text[$Target]->{$Output_unit} . "\n", $Output_value;
+}
+
+# action }}}
+# functions {{{ ------------------------------------------------
+
+sub calculate {
+    my $target = shift;
+    my $value;
+    unless ($Recalculate) {
+        if ($target == DISTANCE) {
+            $value = $Values[SPEED] * $Values[TIME];
+        }
+        elsif ($target == SPEED) {
+            $value = ( $Values[DISTANCE] / $Values[TIME]);
+        }
+        elsif ($target == TIME) {
+            $value = $Values[DISTANCE] / $Values[SPEED];
+        }
+        else {
+            error(ERR_NO_TARGET);
+        }
+        $Values[$target] = $value;    
+    }
+}
+
+sub get_value {
+    my $entity = shift;
+    if ($options{$Entity_option[$entity]}) {
+        # very ugly but works for now:
+        if ($entity == TIME) {
+            $Values[$entity] = parse_time($options{$Entity_option[$entity]});
+        }
+        elsif ($options{$Entity_option[$entity]} =~ /$Entity_pattern[$entity]/) {
+            my $value = $1;
+            my $unit = $2 || $Default_unit[$entity];
+            $Values[$entity] = $value * $Unit_factor[$entity]->{$unit};
+        }
+        else {
+            error($Entity_syntax_error[$entity]);
+        }
+        mydebug("$Entity_text[$entity]: $Values[$entity] " .
+                $Unit_text[$entity]->{$Base_unit[$entity]} . "\n");
+    }
+}
+
+sub mydebug {
+    if ($Debug) {
+        print @_;
+    }
+}
+
+sub help {
+    print "\n";
+    print "speedcalc - time/distance/speed calculator\n";
+    print "\n";
+    print "v$Version $Version_date $Real_name <$Email>\n";
+    print "\n";
+    usage();
+    print "\n";
+    exit(0);
+}
+
+sub error {
+    my $err_code = shift;
+    print "\n";
+    print "ERROR: $errors[$err_code]\n";
+    print "\n";
+    usage();
+    print "\n";
+    exit($err_code);
+}
+
+sub usage {
+    print <<EOF;
+USAGE: speedcalc [-t <time>] [-d <dist>] [-s <speed>] [-p <num>] [-o <unit>] [-v] [-h]
+EOF
+}
+
+sub format_time {
+    my $time = shift;
+    # round correctly:
+    $time = floor($time + 0.5);
+    my $format = "";
+    my $sec = $time % 60;
+    $time = ( $time - $sec ) / 60;
+    if ($time) {
+        $format = sprintf("%02ds", $sec);
+        my $min = $time % 60;
+        $time = ($time - $min ) / 60;
+        if ($time) {
+            $format = sprintf("%02dm$format", $min);
+            my $hour = $time % 24;
+            $time = ($time - $hour) / 24;
+            if ($time) {
+                $format = sprintf("%02dh$format", $hour);
+                my $day = $time % 7;
+                $time = ($time - $day) / 7;
+                if ($time) {
+                    $format = sprintf("%02dd$format", $day);
+                    $format = $time . "w$format";
+                }
+                else {
+                    $format = $day . "d$format";
+                }
+            }
+            else {
+                $format = $hour . "h$format";
+            }
+        }
+        else {
+            $format = $min . "m$format";
+        }
+    }
+    else {
+        $format = $sec . "s";
+    }
+    return $format;
+}
+
+# parse time in format [Xw][Xd][Xh][Xm][X[.Y][s]] and return seconds
+sub parse_time {
+    my $timestr = shift;
+    my $seconds = 0;
+    foreach my $unit (qw(w d h m)) {
+        if ($timestr =~ s/^(\d+)$unit(.*)$/$2/) {
+            $seconds += $1 * $Unit_factor[TIME]->{$unit};
+        }
+    }
+    if ($timestr =~ /^(\d+(?:\.\d+)?)s?$/ ) {
+        $seconds += $1;
+    }
+    elsif ($timestr) {
+        error(ERR_SYNTAX_TIME);
+    }
+    return $seconds;
+}
+
+# functions }}}
+
+# ENTE
