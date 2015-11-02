@@ -2,7 +2,7 @@
 # vim:et:sts=4:sw=4:si:fdm=marker:tw=0
 
 # speedcalc : calculate time, distance, speed
-# author    : Michael Adam <mad@obnox.de>
+# author    : Michael Adam <obnox@samba.org>
 # license   : GPL
 # history   :
 #   v0.1  2005-04-25 initial version
@@ -17,7 +17,7 @@ use POSIX qw(floor);
 
 my $Version = "0.1";
 my $Version_date = "2005-04-25";
-my $Email = "mad\@obnox.de";
+my $Email = "obnox\@samba.org";
 my $Real_name = "Michael Adam";
 
 # - error constants/messages {{{ -------------------------------
