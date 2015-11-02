@@ -68,7 +68,7 @@ $Entity_option[DISTANCE] = "d";
 my @Entity_pattern;
 $Entity_pattern[TIME]     = '^(\d+(?:\.\d+)?)([smhdw]?)$';
 $Entity_pattern[SPEED]    = '^(\d+(?:\.\d+)?)(m\/s|km\/h)?$';
-$Entity_pattern[DISTANCE] = '^(\d+(?:\.\d+)?)(m|km)?$';
+$Entity_pattern[DISTANCE] = '^(\d+(?:\.\d+)?)(yd|m|km|mi)?$';
 
 my @Entity_syntax_error;
 $Entity_syntax_error[TIME]     = ERR_SYNTAX_TIME;
@@ -107,8 +107,10 @@ $Unit_factor[SPEED] = {
     "km/h" => 1 / 3.6,
 };
 $Unit_factor[DISTANCE] = {
+    "yd" => 0.9144,
     "m" => 1,
     "km" => 1000,
+    "mi" => 1609.344,
 };
 
 # text output strings for units:
@@ -125,14 +127,16 @@ $Unit_text[SPEED] = {
     "m/s"  => "m/sec",
 };
 $Unit_text[DISTANCE] = {
+    "yd" => "yards",
     "m" => "meters",
     "km" => "kilometers",
+    "mi" => "miles",
 };
 
 my $Output_unit;
 my @Output_unit_pattern;
 $Output_unit_pattern[SPEED]    = '^(km\/h|m\/s)$';
-$Output_unit_pattern[DISTANCE] = '^(m|km)$';
+$Output_unit_pattern[DISTANCE] = '^(yd|m|km|mi)$';
 
 # configuration }}}
 # analyse options {{{ ------------------------------------------
