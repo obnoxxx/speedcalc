@@ -111,7 +111,7 @@ $Unit_factor[DISTANCE] = {
 $Unit_factor[SPEED] = {
     "m/s"  => 1 ,
     "km/h" => 1 / 3.6,
-    "yd/s" => 1 / $Unit_factor[DISTANCE]->{"yd"},
+    "yd/s" => $Unit_factor[DISTANCE]->{"yd"},
     "mi/h" => $Unit_factor[DISTANCE]->{"mi"} / $Unit_factor[TIME]->{"h"},
 };
 
