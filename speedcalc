@@ -109,9 +109,9 @@ $Unit_factor[DISTANCE] = {
     "mi" => 1609.344,
 };
 $Unit_factor[SPEED] = {
-    "m/s"  => 1 ,
+    "m/s"  => $Unit_factor[DISTANCE]->{"m"}  / $Unit_factor[TIME]->{"s"},
     "km/h" => $Unit_factor[DISTANCE]->{"km"} / $Unit_factor[TIME]->{"h"},
-    "yd/s" => $Unit_factor[DISTANCE]->{"yd"},
+    "yd/s" => $Unit_factor[DISTANCE]->{"yd"} / $Unit_factor[TIME]->{"s"},
     "mi/h" => $Unit_factor[DISTANCE]->{"mi"} / $Unit_factor[TIME]->{"h"},
 };
 
