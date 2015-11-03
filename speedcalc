@@ -67,8 +67,11 @@ $Entity_option[DISTANCE] = "d";
 # regexes for parsing cmd line:
 my @Entity_pattern;
 $Entity_pattern[TIME]     = '^(\d+(?:\.\d+)?)([smhdw]?)$';
-$Entity_pattern[SPEED]    = '^(\d+(?:\.\d+)?)(m\/s|km\/h|yd\/s|mi\/h)?$';
+$Entity_pattern[SPEED]    = '^(\d+(?:\.\d+)?)(m\/s|km\/h|yd\/s|mi\/h|s\/m|s\/yd|s\/km|s\/mi)?$';
 $Entity_pattern[DISTANCE] = '^(\d+(?:\.\d+)?)(yd|m|km|mi)?$';
+
+# helper regex to separate pace format for speed (reciprocal):
+my $Entity_pattern_speed_reciprocal = '^(.*)\/(m|yd|km|mi)$';
 
 my @Entity_syntax_error;
 $Entity_syntax_error[TIME]     = ERR_SYNTAX_TIME;
@@ -113,6 +116,31 @@ $Unit_factor[SPEED] = {
     "km/h" => $Unit_factor[DISTANCE]->{"km"} / $Unit_factor[TIME]->{"h"},
     "yd/s" => $Unit_factor[DISTANCE]->{"yd"} / $Unit_factor[TIME]->{"s"},
     "mi/h" => $Unit_factor[DISTANCE]->{"mi"} / $Unit_factor[TIME]->{"h"},
+    # pace options (reciprocal)
+    "s/m"  => $Unit_factor[DISTANCE]->{"m"}  / $Unit_factor[TIME]->{"s"},
+    "s/yd" => $Unit_factor[DISTANCE]->{"yd"} / $Unit_factor[TIME]->{"s"},
+    "s/km" => $Unit_factor[DISTANCE]->{"km"} / $Unit_factor[TIME]->{"s"},
+    "s/mi" => $Unit_factor[DISTANCE]->{"mi"} / $Unit_factor[TIME]->{"s"},
+    #
+    "/m"  => $Unit_factor[DISTANCE]->{"m"}  / $Unit_factor[TIME]->{"s"},
+    "/yd" => $Unit_factor[DISTANCE]->{"yd"} / $Unit_factor[TIME]->{"s"},
+    "/km" => $Unit_factor[DISTANCE]->{"km"} / $Unit_factor[TIME]->{"s"},
+    "/mi" => $Unit_factor[DISTANCE]->{"mi"} / $Unit_factor[TIME]->{"s"},
+};
+
+my $Speed_reciprocal = {
+    "m/s"  => 0,
+    "km/h" => 0,
+    "yd/s" => 0,
+    "mi/h" => 0,
+    "s/m"  => 1,
+    "s/yd" => 1,
+    "s/km" => 1,
+    "s/mi" => 1,
+    "/m"  => 1,
+    "/yd" => 1,
+    "/km" => 1,
+    "/mi" => 1,
 };
 
 # text output strings for units:
@@ -129,6 +157,17 @@ $Unit_text[SPEED] = {
     "m/s"  => "m/sec",
     "yd/s" => "yd/sec",
     "mi/h" => "mph",
+    # pace
+    "s/m"  => "sec/m",
+    "s/yd" => "sec/yd",
+    "s/km" => "sec/km",
+    "s/mi" => "sec/mi",
+    # pace, for formatting time with format_time
+    "/m"  => "/m",
+    "/yd" => "/yd",
+    "/km" => "/km",
+    "/mi" => "/mi",
+
 };
 $Unit_text[DISTANCE] = {
     "yd" => "yards",
@@ -139,7 +178,7 @@ $Unit_text[DISTANCE] = {
 
 my $Output_unit;
 my @Output_unit_pattern;
-$Output_unit_pattern[SPEED]    = '^(km\/h|m\/s|yd\/s|mi\/h)$';
+$Output_unit_pattern[SPEED]    = '^(km\/h|m\/s|yd\/s|mi\/h|s\/m|s\/yd|s\/km|s\/mi|\/m|\/yd|\/km|\/mi)$';
 $Output_unit_pattern[DISTANCE] = '^(yd|m|km|mi)$';
 
 # configuration }}}
@@ -249,15 +288,27 @@ mydebug("precision: $Precision\n");
 # action {{{ ---------------------------------------------------
 
 calculate($Target);
-mydebug("Target: $Values[$Target] $Default_unit[$Target]\n");
+mydebug("Target: $Values[$Target] $Base_unit[$Target]\n");
 
 if ($Target == TIME) {
     print format_time($Values[TIME]) . "\n";
 }
 else {
     my $Output_value = $Values[$Target] / $Unit_factor[$Target]->{$Output_unit};
-    printf "%." . $Precision . "f "
-           . $Unit_text[$Target]->{$Output_unit} . "\n", $Output_value;
+    if (($Target == SPEED) and ($Speed_reciprocal->{$Output_unit})) {
+        $Output_value = 1 / $Output_value;
+        if ($Output_unit =~ /^\//) {
+            print format_time($Output_value) . "$Output_unit\n";
+        }
+        else {
+            printf "%." . $Precision . "f "
+                   . $Unit_text[SPEED]->{$Output_unit} . "\n", $Output_value;
+        }
+    }
+    else {
+        printf "%." . $Precision . "f "
+               . $Unit_text[$Target]->{$Output_unit} . "\n", $Output_value;
+    }
 }
 
 # action }}}
@@ -286,9 +337,22 @@ sub calculate {
 sub get_value {
     my $entity = shift;
     if ($options{$Entity_option[$entity]}) {
-        # very ugly but works for now:
         if ($entity == TIME) {
-            $Values[$entity] = parse_time($options{$Entity_option[$entity]});
+            my $time_str = $options{$Entity_option[TIME]};
+            $Values[TIME] = parse_time($time_str);
+        }
+        elsif (($entity == SPEED) and
+               ($options{$Entity_option[SPEED]} =~ /$Entity_pattern_speed_reciprocal/))
+        {
+            my $time_str = $1;
+            my $dist_unit = $2;
+            my $time = parse_time($time_str);
+            $Values[SPEED] = $Unit_factor[DISTANCE]->{$dist_unit} / $time;
+
+            mydebug("parsing reciprocal speed:\n");
+            mydebug(" - time_str:  $time_str\n");
+            mydebug(" - time:      $time sec\n");
+            mydebug(" - dist_unit: $dist_unit\n");
         }
         elsif ($options{$Entity_option[$entity]} =~ /$Entity_pattern[$entity]/) {
             my $value = $1;
